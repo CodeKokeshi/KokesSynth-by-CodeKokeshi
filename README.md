@@ -34,7 +34,7 @@
 - **Pulse Wave** - Atari-style depth
 - **Noise** - Perfect for drums and percussion
 
-### 🤖 AI Music Generation
+### 🤖 Music Generation
 Choose from **7 generation modes**:
 - **Random** - Picks any technique randomly
 - **Chord Progression** - I-IV-V-I patterns
