@@ -260,6 +260,12 @@ class MainWindow(QMainWindow):
         self.sequencer_canvas = SequencerCanvas(rows=self.seq_rows, steps=self.seq_steps)
         layout.addWidget(self.sequencer_canvas)
         
+        # Help text
+        help_label = QLabel("💡 Click & Drag: Pattern Notes | Use MELODY GENERATOR for smooth curves")
+        help_label.setStyleSheet("color: #7f8c8d; font-size: 11px; padding: 5px;")
+        help_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(help_label)
+        
         # Tempo control
         tempo_layout = QHBoxLayout()
         tempo_layout.addWidget(QLabel("Tempo (BPM):"))
@@ -374,6 +380,24 @@ class MainWindow(QMainWindow):
         """)
         self.generate_btn.clicked.connect(self.generate_music)
         gen_layout.addWidget(self.generate_btn)
+        
+        # Melody Generator button
+        self.melody_gen_btn = QPushButton("MELODY GENERATOR")
+        self.melody_gen_btn.setMinimumSize(150, 40)
+        self.melody_gen_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                font-size: 14px;
+                font-weight: bold;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+        self.melody_gen_btn.clicked.connect(self.open_melody_generator)
+        gen_layout.addWidget(self.melody_gen_btn)
         
         layout.addLayout(gen_layout)
         
@@ -502,6 +526,16 @@ class MainWindow(QMainWindow):
         
         # Show technique used in status label
         self.status_label.setText(f"Generated: {technique_name}")
+    
+    def open_melody_generator(self):
+        """Open the melody generator window"""
+        from gui.melody_generator_window import MelodyGeneratorWindow
+        dialog = MelodyGeneratorWindow(self)
+        if dialog.exec():
+            # Apply generated melody curve points
+            melody_points = dialog.get_melody_points()
+            self.sequencer_canvas.set_melody_points(melody_points)
+            self.status_label.setText(f"Melody curve applied! ({len(melody_points)} points)")
     
     def export_audio(self):
         """Export the current pattern to WAV file"""
@@ -742,6 +776,7 @@ class MainWindow(QMainWindow):
         """Advance one step in the sequencer"""
         # Play notes for current step - with duration based on consecutive tiles
         for row in range(self.seq_rows):
+            # Check pattern layer
             if self.sequencer_canvas.is_note_at(row, self.current_step):
                 # Check if this is the start of a note (previous step was empty or we're at step 0)
                 is_note_start = (self.current_step == 0 or 
@@ -764,6 +799,27 @@ class MainWindow(QMainWindow):
                     # Play the note with calculated duration
                     freq = self.seq_freqs[row]
                     self.synth.play_note(freq, duration=total_duration)
+        
+        # Play smooth melody with pitch interpolation (FL Studio style!)
+        if len(self.sequencer_canvas.melody_points) >= 2:
+            # Get interpolated pitch at current step
+            melody_row = self.sequencer_canvas.get_melody_at_step(self.current_step)
+            if melody_row is not None:
+                # Convert continuous row to frequency with smooth interpolation
+                # Interpolate between discrete frequencies
+                row_floor = int(melody_row)
+                row_ceil = min(row_floor + 1, self.seq_rows - 1)
+                t = melody_row - row_floor
+                
+                # Linear interpolation in frequency space
+                freq_low = self.seq_freqs[row_floor]
+                freq_high = self.seq_freqs[row_ceil]
+                freq = freq_low + (freq_high - freq_low) * t
+                
+                # Play short note for smooth melody
+                bpm = self.tempo_spin.value()
+                step_duration = 60.0 / bpm / 4
+                self.synth.play_note(freq, duration=step_duration * 0.8)
         
         # Update canvas to show current step
         self.sequencer_canvas.set_current_step(self.current_step)

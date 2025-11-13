@@ -18,6 +18,9 @@ class SequencerCanvas(QWidget):
         # Grid state - 2D array of booleans
         self.grid = [[False for _ in range(steps)] for _ in range(rows)]
         
+        # Melody curve - list of (step, row) points for smooth curve
+        self.melody_points = []  # [(step_float, row_float), ...]
+        
         # Drawing state
         self.is_drawing = False
         self.draw_mode = True  # True = add notes, False = erase notes
@@ -71,7 +74,6 @@ class SequencerCanvas(QWidget):
         if event.button() == Qt.MouseButton.LeftButton:
             row, col = self.get_cell_at_pos(event.pos().x(), event.pos().y())
             if row is not None and col is not None:
-                # Toggle the cell
                 self.grid[row][col] = not self.grid[row][col]
                 self.draw_mode = self.grid[row][col]
                 self.is_drawing = True
@@ -130,7 +132,7 @@ class SequencerCanvas(QWidget):
                     # Current step but no note
                     painter.fillRect(rect, self.hover_color.darker(150))
                 elif self.grid[row][col]:
-                    # Note present
+                    # Pattern note
                     painter.fillRect(rect, self.note_color)
                 else:
                     # Empty cell
@@ -155,6 +157,31 @@ class SequencerCanvas(QWidget):
             y = row * cell_height + cell_height // 2
             rect = QRect(5, y - 12, 42, 24)
             painter.drawText(rect, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, note_labels[row])
+        
+        # Draw melody curve as smooth line overlay (FL Studio style!)
+        if len(self.melody_points) >= 2:
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            pen = QPen(QColor(231, 76, 60, 200), 3)  # Red, semi-transparent, thick
+            painter.setPen(pen)
+            
+            # Draw line connecting all melody points
+            for i in range(len(self.melody_points) - 1):
+                step1, row1 = self.melody_points[i]
+                step2, row2 = self.melody_points[i + 1]
+                
+                x1 = x_offset + step1 * cell_width + cell_width // 2
+                y1 = row1 * cell_height + cell_height // 2
+                x2 = x_offset + step2 * cell_width + cell_width // 2
+                y2 = row2 * cell_height + cell_height // 2
+                
+                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+            
+            # Draw control points as circles
+            painter.setBrush(QColor(231, 76, 60))
+            for step, row in self.melody_points:
+                x = x_offset + step * cell_width + cell_width // 2
+                y = row * cell_height + cell_height // 2
+                painter.drawEllipse(int(x) - 4, int(y) - 4, 8, 8)
     
     def set_current_step(self, step):
         """Set the currently playing step"""
@@ -164,7 +191,31 @@ class SequencerCanvas(QWidget):
     def clear_grid(self):
         """Clear all notes"""
         self.grid = [[False for _ in range(self.steps)] for _ in range(self.rows)]
+        self.melody_points = []
         self.update()
+    
+    def set_melody_points(self, points):
+        """Set melody curve points [(step, row), ...]"""
+        self.melody_points = points
+        self.update()
+    
+    def get_melody_at_step(self, step):
+        """Get interpolated melody pitch (row) at given step"""
+        if len(self.melody_points) < 2:
+            return None
+        
+        # Find surrounding points
+        for i in range(len(self.melody_points) - 1):
+            step1, row1 = self.melody_points[i]
+            step2, row2 = self.melody_points[i + 1]
+            
+            if step1 <= step <= step2:
+                # Linear interpolation
+                t = (step - step1) / (step2 - step1) if step2 != step1 else 0
+                row = row1 + (row2 - row1) * t
+                return row
+        
+        return None
     
     def is_note_at(self, row, col):
         """Check if there's a note at the given position"""
